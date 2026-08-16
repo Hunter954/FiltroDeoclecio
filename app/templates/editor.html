@@ -11,7 +11,7 @@
   </a>
   <a href="{{ url_for('public.filter_page', slug=featured.slug) }}" class="editor-back">← Voltar</a>
 </div>
-<div class="editor-simple-card">
+<div class="editor-workspace">
   <div class="editor-canvas-area {{'has-filter-nav' if filters|length > 1 else 'no-filter-nav'}}">
     {% if filters|length > 1 %}<button class="filter-arrow filter-prev" id="filterPrev" aria-label="Filtro anterior">‹</button>{% endif %}
     <div class="editor-stage" id="editorStage"><canvas id="editorCanvas" width="1080" height="1080"></canvas><button class="stage-hint" id="stageHint" type="button"><div>↑</div><b>Escolha uma foto para começar</b><small>JPG, PNG ou WEBP • até 15 MB</small></button></div>
