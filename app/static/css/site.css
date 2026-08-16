@@ -48,3 +48,47 @@
   .editor-canvas-area .editor-stage{border-radius:20px}
   .editor-stage .stage-hint{border-radius:19px}
 }
+
+
+/* Campaign gradient continuity: editor header and public footers */
+footer,
+.editor-header-band{
+  position:relative;
+  background:radial-gradient(circle at 83% 30%,#1888ff 0,#0758e8 32%,#0639a9 68%,#04256c 100%);
+}
+footer:before,
+.editor-header-band:before{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:52px 52px;
+  opacity:.55;
+}
+footer .footer-inner,
+.editor-header-band .editor-topline{position:relative;z-index:1}
+.editor-header-band{box-shadow:0 12px 34px rgba(4,37,108,.16)}
+.editor-header-band .editor-topline{min-height:96px;margin:0 auto;padding:18px 0;border-bottom:0}
+.editor-header-band .editor-campaign-logo img{max-width:215px;max-height:60px}
+.editor-header-band .editor-logo-fallback{color:#fff}
+.editor-header-band .editor-back{
+  border-color:rgba(255,255,255,.28);
+  background:rgba(255,255,255,.10);
+  color:#fff;
+  box-shadow:none;
+  backdrop-filter:blur(8px);
+}
+.editor-header-band .editor-back:hover{
+  border-color:rgba(255,255,255,.48);
+  background:rgba(255,255,255,.16);
+  box-shadow:0 8px 24px rgba(0,0,0,.10);
+}
+.editor-simple-section{padding-top:34px}
+footer{color:#dbe7ff}
+footer .footer-inner p{color:#dbe7ff}
+@media(max-width:700px){
+  .editor-header-band .editor-topline{min-height:78px;padding:12px 0;margin:0 auto}
+  .editor-header-band .editor-campaign-logo img{max-width:155px;max-height:46px}
+  .editor-simple-section{padding-top:20px}
+}

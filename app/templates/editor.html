@@ -2,15 +2,17 @@
 {% block body %}
 <div class="site editor-site" style="--brand:{{featured.primary_color}};--accent:{{featured.accent_color}}">
 <main class="editor-simple-main">
+<header class="editor-header-band">
+  <div class="wrap editor-topline">
+    <a class="editor-campaign-logo" href="{{ url_for('public.filter_page', slug=featured.slug) }}" aria-label="Voltar para a página inicial">
+      {% set editor_logo_url=url_for('public.footer_logo') %}
+      <img src="{{editor_logo_url}}" alt="Logomarca da campanha" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+      <span class="editor-logo-fallback">DEOCLÉCIO DUARTE • 44222</span>
+    </a>
+    <a href="{{ url_for('public.filter_page', slug=featured.slug) }}" class="editor-back">← Voltar</a>
+  </div>
+</header>
 <section class="editor-simple-section"><div class="wrap editor-simple-wrap">
-<div class="editor-topline">
-  <a class="editor-campaign-logo" href="{{ url_for('public.filter_page', slug=featured.slug) }}" aria-label="Voltar para a página inicial">
-    {% set editor_logo_url=url_for('public.footer_logo') %}
-    <img src="{{editor_logo_url}}" alt="Logomarca da campanha" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
-    <span class="editor-logo-fallback">DEOCLÉCIO DUARTE • 44222</span>
-  </a>
-  <a href="{{ url_for('public.filter_page', slug=featured.slug) }}" class="editor-back">← Voltar</a>
-</div>
 <div class="editor-workspace">
   <div class="editor-canvas-area {{'has-filter-nav' if filters|length > 1 else 'no-filter-nav'}}">
     {% if filters|length > 1 %}<button class="filter-arrow filter-prev" id="filterPrev" aria-label="Filtro anterior">‹</button>{% endif %}
