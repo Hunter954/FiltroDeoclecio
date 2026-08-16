@@ -71,6 +71,13 @@ def create_app():
     login_manager.login_message_category = "warning"
     csrf.init_app(app)
 
+    # Public editor APIs run inside an iframe on the campaign WordPress domain.
+    # Browsers may block third-party session cookies in that context, which makes
+    # Flask-WTF CSRF validation fail before the API can return JSON. The public
+    # endpoints already use per-submission access tokens for sensitive actions,
+    # so keep CSRF protection on the admin blueprint and exempt only public_bp.
+    csrf.exempt(public_bp)
+
     app.register_blueprint(public_bp)
     app.register_blueprint(admin_bp, url_prefix="/admin")
 

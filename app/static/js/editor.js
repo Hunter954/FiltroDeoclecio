@@ -34,6 +34,22 @@
   let pointers = new Map();
   let pinchDistance = 0;
 
+  async function readJson(res, fallbackMessage){
+    const text=await res.text();
+    let data={};
+    try{ data=text ? JSON.parse(text) : {}; }
+    catch(_err){
+      // Railway/proxy and CSRF errors may arrive as HTML. Do not expose the
+      // confusing "Unexpected token <" message to the visitor.
+      const message = res.status === 502 || res.status === 503 || res.status === 504
+        ? 'O servidor demorou para responder. Tente novamente em alguns segundos.'
+        : fallbackMessage;
+      throw new Error(message);
+    }
+    if(!res.ok) throw new Error(data.error||fallbackMessage);
+    return data;
+  }
+
   function event(type){
     fetch('/api/events', {method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({type,filter_id:activeFilter.id})}).catch(()=>{});
   }
@@ -104,8 +120,7 @@
     try{
       event('upload_click');
       const res=await fetch('/api/upload',{method:'POST',headers:{'X-CSRFToken':csrf},body:fd});
-      const data=await res.json();
-      if(!res.ok) throw new Error(data.error||'Erro no envio');
+      const data=await readJson(res,'Não foi possível enviar a foto. Tente novamente.');
       submission=data;
       photo=new Image();
       photo.onload=()=>{
@@ -181,8 +196,7 @@
     finishPhoto.disabled=true;
     try{
       const res=await fetch(`/api/complete/${submission.submission_id}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({token:submission.token,filter_id:activeFilter.id,transform:{x,y,scale}})});
-      const data=await res.json();
-      if(!res.ok) throw new Error(data.error||'Erro ao finalizar');
+      const data=await readJson(res,'Não foi possível finalizar a imagem. Tente novamente.');
       downloadPhoto.href=data.download_url;
       controls.hidden=true;
       doneState.hidden=false;
