@@ -1,0 +1,19 @@
+{% extends 'base.html' %}{% block title %}Criar foto • {{ featured.name }}{% endblock %}
+{% block body %}
+<div class="site editor-site" style="--brand:{{featured.primary_color}};--accent:{{featured.accent_color}}">
+<header class="nav nav-solid"><div class="wrap nav-inner"><a class="brand" href="{{ url_for('public.filter_page', slug=featured.slug) }}"><span class="brand-mark">44<span>222</span></span><span class="brand-copy">DEOCLÉCIO<br><b>DUARTE</b></span></a><a href="{{ url_for('public.filter_page', slug=featured.slug) }}" class="nav-cta">← Voltar</a></div></header>
+<main class="editor-page-main">
+<section class="editor-hero"><div class="wrap editor-page-head"><div><span class="eyebrow dark"><i></i> EDITOR OFICIAL • 44222</span><h1 class="editor-title">Crie sua foto com moldura</h1><p class="editor-subtitle">Envie sua foto, ajuste o enquadramento e baixe sua imagem pronta em alta qualidade.</p></div><div class="editor-badge"><img src="{{ url_for('public.filter_asset', filter_id=featured.id, kind='example') }}" alt="Exemplo da moldura"></div></div></section>
+<section class="editor-page-section"><div class="wrap"><div class="editor-shell"><div class="editor-layout">
+<div class="editor-stage-wrap"><div class="editor-stage" id="editorStage"><canvas id="editorCanvas" width="1080" height="1080"></canvas><div class="stage-hint" id="stageHint"><div>↑</div><b>Escolha uma foto para começar</b><small>JPG, PNG ou WEBP • até 15 MB</small></div></div><small class="drag-tip">↔ Arraste a foto para reposicionar</small></div>
+<div class="editor-controls">
+<div class="progress-dots"><i class="active"></i><i></i><i></i><span id="stepLabel">1 de 3</span></div>
+<div class="control-step active" data-step="1"><h3>Escolha uma boa foto</h3><p>Prefira uma imagem nítida e com o rosto bem iluminado.</p><input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp" hidden><button class="btn btn-primary wide" id="choosePhoto">Escolher foto</button></div>
+<div class="control-step" data-step="2"><h3>Ajuste o enquadramento</h3><p>Use o zoom e arraste a foto até ficar do seu jeito.</p><div class="range-row"><label>Zoom</label><output id="zoomValue">100%</output></div><input type="range" id="zoomRange" min="100" max="260" value="100"><div class="mini-actions"><button class="btn btn-soft" id="centerPhoto">◎ Centralizar</button><button class="btn btn-soft" id="changePhoto">↻ Trocar foto</button></div><button class="btn btn-primary wide" id="finishPhoto">Finalizar foto <span>→</span></button></div>
+<div class="control-step" data-step="3"><div class="success-mark">✓</div><h3>Sua foto ficou pronta!</h3><p>Baixe em alta qualidade e use como foto de perfil nas suas redes.</p><a class="btn btn-primary wide" id="downloadPhoto" href="#">↓ Baixar minha foto</a><button class="btn btn-soft wide" id="makeAnother">Fazer outra foto</button></div>
+</div></div></div></div></section>
+</main>
+<footer><div class="wrap footer-inner"><div class="brand light"><span class="brand-mark">44<span>222</span></span><span class="brand-copy">DEOCLÉCIO<br><b>DUARTE</b></span></div><p>Ferramenta gratuita para criação de foto de perfil com moldura.</p></div></footer>
+</div>
+<script>window.FILTER_CONFIG={{ {'id':featured.id,'overlay':url_for('public.filter_asset',filter_id=featured.id,kind='overlay'),'name':featured.name}|tojson }};</script>
+{% endblock %}
