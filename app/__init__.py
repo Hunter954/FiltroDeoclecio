@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 
 from .extensions import db, login_manager
-from .models import AdminUser, Filter
+from .models import AdminUser, Filter, SiteSetting
 from .routes import public_bp, admin_bp
 from .utils import ensure_dirs, cleanup_expired
 
@@ -74,6 +74,12 @@ def create_app():
     app.register_blueprint(public_bp)
     app.register_blueprint(admin_bp, url_prefix="/admin")
 
+    @app.context_processor
+    def inject_site_layout():
+        setting = SiteSetting.query.first()
+        width = setting.content_width if setting else 1080
+        return {"site_content_width": max(760, min(1400, int(width)))}
+
     @app.errorhandler(413)
     def too_large(_error):
         if request.path.startswith("/api/"):
@@ -107,6 +113,13 @@ def _bootstrap(app):
             db.session.commit()
         except IntegrityError:
             # Another Gunicorn worker may have created the bootstrap row first.
+            db.session.rollback()
+
+    if not SiteSetting.query.first():
+        try:
+            db.session.add(SiteSetting(content_width=1080))
+            db.session.commit()
+        except IntegrityError:
             db.session.rollback()
 
     if Filter.query.count() == 0:

@@ -9,7 +9,7 @@ from werkzeug.utils import secure_filename
 from PIL import Image
 from sqlalchemy import func
 from .extensions import db
-from .models import AdminUser, Event, Filter, Submission
+from .models import AdminUser, Event, Filter, Submission, SiteSetting
 from .utils import client_ip_hash, validate_and_normalize, cleanup_expired, render_submission_image
 
 public_bp = Blueprint("public", __name__)
@@ -350,6 +350,12 @@ def filter_feature(filter_id):
 @admin_bp.route("/settings", methods=["GET", "POST"])
 @login_required
 def settings():
+    site_settings = SiteSetting.query.first()
+    if not site_settings:
+        site_settings = SiteSetting(content_width=1080)
+        db.session.add(site_settings)
+        db.session.flush()
+
     if request.method == "POST":
         current_user.name = (request.form.get("name") or current_user.name).strip()
         email = (request.form.get("email") or current_user.email).strip().lower()
@@ -358,6 +364,12 @@ def settings():
         password = request.form.get("password") or ""
         if password:
             current_user.password_hash = generate_password_hash(password)
+
+        # Controle visual do alinhamento horizontal do site.
+        # Quanto menor o valor, mais o conteúdo entra para o centro da tela.
+        requested_width = request.form.get("content_width", type=int)
+        if requested_width is not None:
+            site_settings.content_width = max(760, min(1400, requested_width))
 
         footer_logo = request.files.get("footer_logo")
         if footer_logo and footer_logo.filename:
@@ -377,5 +389,7 @@ def settings():
 
         db.session.commit()
         flash("Configurações atualizadas.", "success")
+        return redirect(url_for("admin.settings"))
+
     footer_logo_exists = (Path(current_app.config["DATA_DIR"]) / "site" / "footer-logo.png").exists()
-    return render_template("admin/settings.html", footer_logo_exists=footer_logo_exists)
+    return render_template("admin/settings.html", footer_logo_exists=footer_logo_exists, site_settings=site_settings)

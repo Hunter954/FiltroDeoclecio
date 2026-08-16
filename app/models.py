@@ -18,6 +18,13 @@ class AdminUser(UserMixin, db.Model):
 def load_user(user_id):
     return db.session.get(AdminUser, int(user_id))
 
+
+class SiteSetting(db.Model):
+    __tablename__ = "site_settings"
+    id = db.Column(db.Integer, primary_key=True)
+    content_width = db.Column(db.Integer, nullable=False, default=1080)
+    updated_at = db.Column(db.DateTime(timezone=True), default=now, onupdate=now, nullable=False)
+
 class Filter(db.Model):
     __tablename__ = "filters"
     id = db.Column(db.Integer, primary_key=True)
