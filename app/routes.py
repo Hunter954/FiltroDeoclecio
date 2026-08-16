@@ -41,9 +41,10 @@ def filter_page(slug):
 @public_bp.get("/f/<slug>/editor")
 def editor_page(slug):
     f = Filter.query.filter_by(slug=slug, is_active=True).first_or_404()
+    filters = Filter.query.filter_by(is_active=True).order_by(Filter.created_at.asc()).all()
     log_event("page_view", f.id)
     log_event("editor_open", f.id)
-    return render_template("editor.html", featured=f)
+    return render_template("editor.html", featured=f, filters=filters)
 
 
 @public_bp.get("/filter-asset/<int:filter_id>/<kind>")
@@ -53,6 +54,14 @@ def filter_asset(filter_id, kind):
     if not name:
         abort(404)
     p = Path(current_app.config["DATA_DIR"]) / "filters" / name
+    if not p.exists():
+        abort(404)
+    return send_file(p, max_age=3600)
+
+
+@public_bp.get("/site-asset/footer-logo")
+def footer_logo():
+    p = Path(current_app.config["DATA_DIR"]) / "site" / "footer-logo.png"
     if not p.exists():
         abort(404)
     return send_file(p, max_age=3600)
@@ -129,6 +138,13 @@ def api_complete(submission_id):
     token = data.get("token", "")
     if not secrets.compare_digest(token, s.access_token):
         abort(403)
+
+    selected_filter_id = data.get("filter_id")
+    if selected_filter_id is not None:
+        selected_filter = db.session.get(Filter, int(selected_filter_id))
+        if not selected_filter or not selected_filter.is_active:
+            return jsonify(error="Filtro indisponível."), 404
+        s.filter_id = selected_filter.id
 
     out = Path(current_app.config["DATA_DIR"]) / "rendered" / f"{s.id}.png"
 
@@ -216,7 +232,7 @@ def dashboard():
     counts = {x: sum(1 for e in events if e.event_type == x) for x in ["page_view", "editor_open", "upload", "completed", "download"]}
     unique = len({e.ip_hash for e in events if e.ip_hash})
     conv = (counts["completed"] / counts["page_view"] * 100) if counts["page_view"] else 0
-    recent = Submission.query.order_by(Submission.created_at.desc()).limit(8).all()
+    recent = Submission.query.filter(Submission.completed_at.is_not(None), Submission.rendered_file.is_not(None), Submission.deleted_at.is_(None)).order_by(Submission.completed_at.desc()).limit(8).all()
     filters = Filter.query.order_by(Filter.created_at.desc()).all()
     days = []
     for i in range(13, -1, -1):
@@ -235,7 +251,7 @@ def dashboard():
 def submissions():
     page = request.args.get("page", 1, type=int)
     filter_id = request.args.get("filter_id", type=int)
-    q = Submission.query.order_by(Submission.created_at.desc())
+    q = Submission.query.filter(Submission.completed_at.is_not(None), Submission.rendered_file.is_not(None), Submission.deleted_at.is_(None)).order_by(Submission.completed_at.desc())
     if filter_id:
         q = q.filter_by(filter_id=filter_id)
     pagination = q.paginate(page=page, per_page=24, error_out=False)
@@ -342,6 +358,24 @@ def settings():
         password = request.form.get("password") or ""
         if password:
             current_user.password_hash = generate_password_hash(password)
+
+        footer_logo = request.files.get("footer_logo")
+        if footer_logo and footer_logo.filename:
+            site_dir = Path(current_app.config["DATA_DIR"]) / "site"
+            site_dir.mkdir(parents=True, exist_ok=True)
+            tmp = site_dir / "footer-logo-upload"
+            final = site_dir / "footer-logo.png"
+            footer_logo.save(tmp)
+            try:
+                with Image.open(tmp) as im:
+                    im = im.convert("RGBA")
+                    if max(im.size) > 2400:
+                        im.thumbnail((2400, 2400), Image.Resampling.LANCZOS)
+                    im.save(final, "PNG", optimize=True)
+            finally:
+                tmp.unlink(missing_ok=True)
+
         db.session.commit()
         flash("Configurações atualizadas.", "success")
-    return render_template("admin/settings.html")
+    footer_logo_exists = (Path(current_app.config["DATA_DIR"]) / "site" / "footer-logo.png").exists()
+    return render_template("admin/settings.html", footer_logo_exists=footer_logo_exists)

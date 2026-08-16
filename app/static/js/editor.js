@@ -1,14 +1,28 @@
 (()=>{
   const cfg = window.FILTER_CONFIG;
+  const filters = Array.isArray(window.FILTERS) ? window.FILTERS : [];
   const canvas = document.getElementById('editorCanvas');
   const ctx = canvas?.getContext('2d');
   if (!cfg || !canvas || !ctx) return;
 
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-  const overlay = new Image();
-  overlay.crossOrigin = 'anonymous';
-  overlay.src = cfg.overlay;
+  const input = document.getElementById('photoInput');
+  const hint = document.getElementById('stageHint');
+  const controls = document.getElementById('liveControls');
+  const doneState = document.getElementById('doneState');
+  const finishPhoto = document.getElementById('finishPhoto');
+  const downloadPhoto = document.getElementById('downloadPhoto');
+  const makeAnother = document.getElementById('makeAnother');
+  const zoomIn = document.getElementById('zoomIn');
+  const zoomOut = document.getElementById('zoomOut');
+  const prev = document.getElementById('filterPrev');
+  const next = document.getElementById('filterNext');
+  const filterName = document.getElementById('filterName');
 
+  let activeIndex = Math.max(0, filters.findIndex(f => Number(f.id) === Number(cfg.id)));
+  let activeFilter = filters[activeIndex] || {id: cfg.id, name: cfg.name, overlay: cfg.overlay};
+  let overlay = new Image();
+  overlay.crossOrigin = 'anonymous';
   let photo = null;
   let submission = null;
   let scale = 1;
@@ -16,172 +30,175 @@
   let x = 0;
   let y = 0;
   let drag = false;
-  let last = {x: 0, y: 0};
-
-  const hint = document.getElementById('stageHint');
-  const input = document.getElementById('photoInput');
-  const zoom = document.getElementById('zoomRange');
-  const zoomVal = document.getElementById('zoomValue');
-  const choosePhoto = document.getElementById('choosePhoto');
-  const finishPhoto = document.getElementById('finishPhoto');
-  const changePhoto = document.getElementById('changePhoto');
-  const centerPhoto = document.getElementById('centerPhoto');
-  const makeAnother = document.getElementById('makeAnother');
-  const downloadPhoto = document.getElementById('downloadPhoto');
+  let last = {x:0,y:0};
+  let pointers = new Map();
+  let pinchDistance = 0;
 
   function event(type){
-    fetch('/api/events', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
-      body: JSON.stringify({type, filter_id: cfg.id})
-    }).catch(()=>{});
+    fetch('/api/events', {method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({type,filter_id:activeFilter.id})}).catch(()=>{});
   }
 
-  function setStep(n){
-    document.querySelectorAll('.control-step').forEach(el => el.classList.toggle('active', Number(el.dataset.step) === n));
-    document.querySelectorAll('.progress-dots i').forEach((el, i) => el.classList.toggle('active', i < n));
-    document.getElementById('stepLabel').textContent = `${n} de 3`;
+  function loadOverlay(){
+    const nextOverlay = new Image();
+    nextOverlay.crossOrigin = 'anonymous';
+    nextOverlay.onload = () => { overlay = nextOverlay; draw(); };
+    nextOverlay.src = activeFilter.overlay;
+    if (filterName) filterName.textContent = activeFilter.name;
   }
 
   function draw(){
-    ctx.clearRect(0, 0, 1080, 1080);
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, 1080, 1080);
-    if (photo) ctx.drawImage(photo, x, y, photo.naturalWidth * scale, photo.naturalHeight * scale);
-    if (overlay.complete) ctx.drawImage(overlay, 0, 0, 1080, 1080);
+    ctx.clearRect(0,0,1080,1080);
+    ctx.fillStyle='#fff';
+    ctx.fillRect(0,0,1080,1080);
+    if(photo) ctx.drawImage(photo,x,y,photo.naturalWidth*scale,photo.naturalHeight*scale);
+    if(overlay.complete && overlay.naturalWidth) ctx.drawImage(overlay,0,0,1080,1080);
   }
 
   function resetPosition(){
-    if (!photo) return;
-    minScale = Math.max(1080 / photo.naturalWidth, 1080 / photo.naturalHeight);
-    scale = minScale;
-    x = (1080 - photo.naturalWidth * scale) / 2;
-    y = (1080 - photo.naturalHeight * scale) / 2;
-    zoom.value = 100;
-    zoomVal.textContent = '100%';
+    if(!photo) return;
+    minScale=Math.max(1080/photo.naturalWidth,1080/photo.naturalHeight);
+    scale=minScale;
+    x=(1080-photo.naturalWidth*scale)/2;
+    y=(1080-photo.naturalHeight*scale)/2;
     draw();
   }
 
   function clamp(){
-    if (!photo) return;
-    const w = photo.naturalWidth * scale;
-    const h = photo.naturalHeight * scale;
-    x = Math.min(0, Math.max(1080 - w, x));
-    y = Math.min(0, Math.max(1080 - h, y));
+    if(!photo) return;
+    const w=photo.naturalWidth*scale,h=photo.naturalHeight*scale;
+    x=Math.min(0,Math.max(1080-w,x));
+    y=Math.min(0,Math.max(1080-h,y));
   }
 
-  function pointer(e){
-    const r = canvas.getBoundingClientRect();
-    return {
-      x: (e.clientX - r.left) * 1080 / r.width,
-      y: (e.clientY - r.top) * 1080 / r.height,
-    };
+  function pointerPos(e){
+    const r=canvas.getBoundingClientRect();
+    return {x:(e.clientX-r.left)*1080/r.width,y:(e.clientY-r.top)*1080/r.height};
+  }
+
+  function zoomBy(factor, center={x:540,y:540}){
+    if(!photo) return;
+    const old=scale;
+    const max=minScale*3.2;
+    scale=Math.max(minScale,Math.min(max,scale*factor));
+    if(scale===old) return;
+    x=center.x-(center.x-x)*(scale/old);
+    y=center.y-(center.y-y)*(scale/old);
+    clamp();
+    draw();
+  }
+
+  function switchFilter(direction){
+    if(filters.length<2) return;
+    activeIndex=(activeIndex+direction+filters.length)%filters.length;
+    activeFilter=filters[activeIndex];
+    loadOverlay();
   }
 
   async function handleFile(file){
-    if (!file) return;
-    choosePhoto.textContent = 'Enviando...';
-    choosePhoto.disabled = true;
-    const fd = new FormData();
-    fd.append('filter_id', cfg.id);
-    fd.append('photo', file);
-
-    try {
+    if(!file) return;
+    hint.innerHTML='<div class="upload-spinner"></div><b>Preparando sua foto...</b><small>Isso leva só alguns segundos</small>';
+    hint.disabled=true;
+    const fd=new FormData();
+    fd.append('filter_id',activeFilter.id);
+    fd.append('photo',file);
+    try{
       event('upload_click');
-      const res = await fetch('/api/upload', {method:'POST', headers:{'X-CSRFToken': csrf}, body: fd});
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro no envio');
-      submission = data;
-      photo = new Image();
-      photo.onload = () => {
-        hint.classList.add('hidden');
+      const res=await fetch('/api/upload',{method:'POST',headers:{'X-CSRFToken':csrf},body:fd});
+      const data=await res.json();
+      if(!res.ok) throw new Error(data.error||'Erro no envio');
+      submission=data;
+      photo=new Image();
+      photo.onload=()=>{
+        hint.hidden=true;
+        controls.hidden=false;
+        doneState.hidden=true;
         resetPosition();
-        setStep(2);
-        choosePhoto.textContent = 'Escolher foto';
-        choosePhoto.disabled = false;
       };
-      photo.src = data.photo_url;
-    } catch (err) {
+      photo.src=data.photo_url;
+    }catch(err){
       alert(err.message);
-      choosePhoto.textContent = 'Escolher foto';
-      choosePhoto.disabled = false;
+      hint.disabled=false;
+      hint.hidden=false;
+      hint.innerHTML='<div>↑</div><b>Escolha uma foto para começar</b><small>JPG, PNG ou WEBP • até 15 MB</small>';
     }
   }
 
-  choosePhoto?.addEventListener('click', () => input.click());
-  changePhoto?.addEventListener('click', () => input.click());
-  input?.addEventListener('change', e => handleFile(e.target.files[0]));
+  hint?.addEventListener('click',()=>input.click());
+  input?.addEventListener('change',e=>handleFile(e.target.files[0]));
+  zoomIn?.addEventListener('click',()=>zoomBy(1.12));
+  zoomOut?.addEventListener('click',()=>zoomBy(1/1.12));
+  prev?.addEventListener('click',()=>switchFilter(-1));
+  next?.addEventListener('click',()=>switchFilter(1));
 
-  zoom?.addEventListener('input', () => {
-    if (!photo) return;
-    const old = scale;
-    scale = minScale * (Number(zoom.value) / 100);
-    const cx = 540, cy = 540;
-    x = cx - (cx - x) * (scale / old);
-    y = cy - (cy - y) * (scale / old);
-    clamp();
-    zoomVal.textContent = `${zoom.value}%`;
-    draw();
-  });
+  canvas.addEventListener('wheel',e=>{
+    if(!photo) return;
+    e.preventDefault();
+    zoomBy(e.deltaY<0?1.08:1/1.08,pointerPos(e));
+  },{passive:false});
 
-  centerPhoto?.addEventListener('click', resetPosition);
-
-  canvas.addEventListener('pointerdown', e => {
-    if (!photo) return;
-    drag = true;
+  canvas.addEventListener('pointerdown',e=>{
+    if(!photo) return;
     canvas.setPointerCapture(e.pointerId);
-    last = pointer(e);
-  });
-
-  canvas.addEventListener('pointermove', e => {
-    if (!drag || !photo) return;
-    const p = pointer(e);
-    x += p.x - last.x;
-    y += p.y - last.y;
-    last = p;
-    clamp();
-    draw();
-  });
-
-  const stopDrag = () => drag = false;
-  canvas.addEventListener('pointerup', stopDrag);
-  canvas.addEventListener('pointercancel', stopDrag);
-  canvas.addEventListener('pointerleave', stopDrag);
-
-  finishPhoto?.addEventListener('click', async () => {
-    if (!photo || !submission) return;
-    finishPhoto.textContent = 'Finalizando...';
-    finishPhoto.disabled = true;
-    try {
-      const res = await fetch(`/api/complete/${submission.submission_id}`, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json', 'X-CSRFToken': csrf},
-        body: JSON.stringify({
-          token: submission.token,
-          transform: {x, y, scale}
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao finalizar');
-      downloadPhoto.href = data.download_url;
-      setStep(3);
-    } catch (e) {
-      alert(e.message);
-    } finally {
-      finishPhoto.innerHTML = 'Finalizar foto <span>→</span>';
-      finishPhoto.disabled = false;
+    pointers.set(e.pointerId,pointerPos(e));
+    if(pointers.size===1){drag=true;last=pointerPos(e)}
+    if(pointers.size===2){
+      const [a,b]=[...pointers.values()];
+      pinchDistance=Math.hypot(a.x-b.x,a.y-b.y);
+      drag=false;
     }
   });
 
-  makeAnother?.addEventListener('click', () => {
-    photo = null;
-    submission = null;
-    input.value = '';
-    hint.classList.remove('hidden');
-    setStep(1);
+  canvas.addEventListener('pointermove',e=>{
+    if(!photo||!pointers.has(e.pointerId)) return;
+    const p=pointerPos(e);
+    pointers.set(e.pointerId,p);
+    if(pointers.size===2){
+      const [a,b]=[...pointers.values()];
+      const dist=Math.hypot(a.x-b.x,a.y-b.y);
+      if(pinchDistance>0){
+        const center={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+        zoomBy(dist/pinchDistance,center);
+      }
+      pinchDistance=dist;
+      return;
+    }
+    if(drag){
+      x+=p.x-last.x;y+=p.y-last.y;last=p;clamp();draw();
+    }
+  });
+
+  function releasePointer(e){
+    pointers.delete(e.pointerId);
+    if(pointers.size===0){drag=false;pinchDistance=0}
+    else if(pointers.size===1){drag=true;last=[...pointers.values()][0]}
+  }
+  canvas.addEventListener('pointerup',releasePointer);
+  canvas.addEventListener('pointercancel',releasePointer);
+
+  finishPhoto?.addEventListener('click',async()=>{
+    if(!photo||!submission) return;
+    finishPhoto.textContent='Finalizando...';
+    finishPhoto.disabled=true;
+    try{
+      const res=await fetch(`/api/complete/${submission.submission_id}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({token:submission.token,filter_id:activeFilter.id,transform:{x,y,scale}})});
+      const data=await res.json();
+      if(!res.ok) throw new Error(data.error||'Erro ao finalizar');
+      downloadPhoto.href=data.download_url;
+      controls.hidden=true;
+      doneState.hidden=false;
+    }catch(e){alert(e.message)}finally{
+      finishPhoto.textContent='Finalizar foto';
+      finishPhoto.disabled=false;
+    }
+  });
+
+  makeAnother?.addEventListener('click',()=>{
+    photo=null;submission=null;input.value='';
+    controls.hidden=true;doneState.hidden=true;hint.hidden=false;hint.disabled=false;
+    hint.innerHTML='<div>↑</div><b>Escolha uma foto para começar</b><small>JPG, PNG ou WEBP • até 15 MB</small>';
     draw();
   });
 
-  overlay.onload = draw;
+  loadOverlay();
   draw();
 })();

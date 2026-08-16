@@ -11,7 +11,7 @@ ALLOWED = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
 
 def ensure_dirs(app):
     base = Path(app.config["DATA_DIR"])
-    for x in ("filters", "uploads", "rendered"):
+    for x in ("filters", "uploads", "rendered", "site"):
         (base / x).mkdir(parents=True, exist_ok=True)
 
 
@@ -25,7 +25,7 @@ def validate_and_normalize(src_path, dst_path):
         im = ImageOps.exif_transpose(im).convert("RGB")
         if max(im.size) > 5000:
             im.thumbnail((5000, 5000), Image.Resampling.LANCZOS)
-        im.save(dst_path, "JPEG", quality=92, optimize=True, progressive=True)
+        im.save(dst_path, "JPEG", quality=90, optimize=False)
 
 
 def render_submission_image(app, submission, transform, out_path):
@@ -55,7 +55,7 @@ def render_submission_image(app, submission, transform, out_path):
             overlay = overlay.resize((1080, 1080), Image.Resampling.LANCZOS)
         output = canvas.convert("RGBA")
         output.alpha_composite(overlay)
-        output.save(out_path, "PNG", optimize=True)
+        output.save(out_path, "PNG", optimize=False, compress_level=3)
 
 
 def cleanup_expired(app):
