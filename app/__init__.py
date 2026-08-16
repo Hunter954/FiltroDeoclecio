@@ -1,8 +1,12 @@
-import os, shutil
+import os
+import shutil
 from pathlib import Path
-from flask import Flask
+
+from flask import Flask, jsonify, request
 from flask_wtf import CSRFProtect
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
+
 from .extensions import db, login_manager
 from .models import AdminUser, Filter
 from .routes import public_bp, admin_bp
@@ -10,41 +14,100 @@ from .utils import ensure_dirs, cleanup_expired
 
 csrf = CSRFProtect()
 
+
+def _database_url() -> str:
+    """Return a SQLAlchemy URL compatible with the installed PostgreSQL driver.
+
+    Railway exposes PostgreSQL URLs as postgres:// or postgresql://. SQLAlchemy's
+    plain postgresql:// URL defaults to psycopg2, while this project intentionally
+    uses psycopg v3 (psycopg[binary]). Force the explicit +psycopg dialect so a
+    deploy never depends on an uninstalled psycopg2 package.
+    """
+    url = (os.getenv("DATABASE_URL") or "").strip()
+    if not url:
+        return "sqlite:////tmp/deoclecio.db"
+
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://"):]
+    if url.startswith("postgresql+psycopg2://"):
+        return "postgresql+psycopg://" + url[len("postgresql+psycopg2://"):]
+    return url
+
+
+def _data_dir() -> str:
+    configured = (os.getenv("DATA_DIR") or "").strip()
+    if configured:
+        return configured
+
+    # Railway volumes for this project are mounted at /data. Keep local
+    # development self-contained when Railway-specific variables are absent.
+    if any(key.startswith("RAILWAY_") for key in os.environ):
+        return "/data"
+    return str(Path(__file__).resolve().parent.parent / "data")
+
+
 def create_app():
     app = Flask(__name__)
-    db_url = os.getenv("DATABASE_URL", "sqlite:////tmp/deoclecio.db")
-    if db_url.startswith("postgres://"):
-        db_url = db_url.replace("postgres://", "postgresql://", 1)
     app.config.update(
-        SECRET_KEY=os.getenv("SECRET_KEY", "dev-change-me"),
-        SQLALCHEMY_DATABASE_URI=db_url,
+        SECRET_KEY=os.getenv("SECRET_KEY") or "dev-change-me",
+        SQLALCHEMY_DATABASE_URI=_database_url(),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        SQLALCHEMY_ENGINE_OPTIONS={
+            "pool_pre_ping": True,
+            "pool_recycle": 280,
+        },
         MAX_CONTENT_LENGTH=int(os.getenv("MAX_UPLOAD_MB", "15")) * 1024 * 1024,
-        DATA_DIR=os.getenv("DATA_DIR", str(Path(__file__).resolve().parent.parent / "data")),
+        DATA_DIR=_data_dir(),
         RETENTION_DAYS=int(os.getenv("RETENTION_DAYS", "30")),
         SITE_NAME=os.getenv("SITE_NAME", "Deoclécio Duarte 44222"),
     )
+
     db.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = "admin.login"
+    login_manager.login_message = "Faça login para acessar o painel."
+    login_manager.login_message_category = "warning"
     csrf.init_app(app)
+
     app.register_blueprint(public_bp)
     app.register_blueprint(admin_bp, url_prefix="/admin")
+
+    @app.errorhandler(413)
+    def too_large(_error):
+        if request.path.startswith("/api/"):
+            max_mb = int(app.config["MAX_CONTENT_LENGTH"] / 1024 / 1024)
+            return jsonify(error=f"A imagem ultrapassa o limite de {max_mb} MB."), 413
+        return "Arquivo grande demais.", 413
 
     with app.app_context():
         ensure_dirs(app)
         db.create_all()
         _bootstrap(app)
         cleanup_expired(app)
+
     return app
 
 
 def _bootstrap(app):
+    """Create initial admin/filter idempotently, including multi-worker boots."""
     email = os.getenv("ADMIN_EMAIL", "admin@campanha.com.br").strip().lower()
     password = os.getenv("ADMIN_PASSWORD", "admin44222")
+
     if not AdminUser.query.filter_by(email=email).first():
-        db.session.add(AdminUser(name="Administrador", email=email, password_hash=generate_password_hash(password)))
-        db.session.commit()
+        try:
+            db.session.add(
+                AdminUser(
+                    name="Administrador",
+                    email=email,
+                    password_hash=generate_password_hash(password),
+                )
+            )
+            db.session.commit()
+        except IntegrityError:
+            # Another Gunicorn worker may have created the bootstrap row first.
+            db.session.rollback()
 
     if Filter.query.count() == 0:
         root = Path(__file__).resolve().parent.parent
@@ -53,18 +116,29 @@ def _bootstrap(app):
         target.mkdir(parents=True, exist_ok=True)
         overlay = target / "moldura-deoclecio.png"
         example = target / "exemplo-deoclecio.png"
-        if (seed / "moldura-deoclecio.png").exists(): shutil.copy2(seed / "moldura-deoclecio.png", overlay)
-        if (seed / "exemplo-deoclecio.png").exists(): shutil.copy2(seed / "exemplo-deoclecio.png", example)
-        f = Filter(
-            name="Deoclécio Duarte 44222",
-            slug="deoclecio-44222",
-            headline="O Paraná de gente que trabalha",
-            subheadline="Mostre seu apoio nas redes sociais com uma foto de perfil personalizada.",
-            overlay_file=overlay.name,
-            example_file=example.name,
-            is_active=True,
-            is_featured=True,
-            primary_color="#0758E8",
-            accent_color="#FFC629",
-        )
-        db.session.add(f); db.session.commit()
+
+        if (seed / "moldura-deoclecio.png").exists() and not overlay.exists():
+            shutil.copy2(seed / "moldura-deoclecio.png", overlay)
+        if (seed / "exemplo-deoclecio.png").exists() and not example.exists():
+            shutil.copy2(seed / "exemplo-deoclecio.png", example)
+
+        try:
+            db.session.add(
+                Filter(
+                    name="Deoclécio Duarte 44222",
+                    slug="deoclecio-44222",
+                    headline="O Paraná de gente que trabalha",
+                    subheadline=(
+                        "Mostre seu apoio nas redes sociais com uma foto de perfil personalizada."
+                    ),
+                    overlay_file=overlay.name,
+                    example_file=example.name,
+                    is_active=True,
+                    is_featured=True,
+                    primary_color="#0758E8",
+                    accent_color="#FFC629",
+                )
+            )
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()

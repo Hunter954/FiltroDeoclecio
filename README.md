@@ -6,7 +6,7 @@ Aplicação Flask + PostgreSQL + Volume para Railway. O visitante envia uma foto
 1. Crie um projeto no GitHub com estes arquivos.
 2. No Railway, adicione **PostgreSQL**.
 3. Adicione um **Volume** montado em `/data`.
-4. Defina as variáveis do `.env.example` (o Railway injeta `DATABASE_URL` automaticamente ao vincular o Postgres).
+4. Defina as variáveis do `.env.example`. Em `DATABASE_URL`, use a referência do serviço PostgreSQL do Railway (ex.: `${{Postgres.DATABASE_URL}}`).
 5. Deploy. O app cria as tabelas e o filtro inicial automaticamente.
 6. Acesse `/admin/login` com `ADMIN_EMAIL` e `ADMIN_PASSWORD`.
 
@@ -19,3 +19,10 @@ Aplicação Flask + PostgreSQL + Volume para Railway. O visitante envia uma foto
 
 ## Privacidade
 O visitante precisa aceitar explicitamente o armazenamento temporário da foto para gerar a moldura. O admin pode apagar um envio individualmente, e o sistema remove automaticamente arquivos vencidos conforme a retenção configurada.
+
+
+## Entrada de produção e PostgreSQL
+- O único entrypoint de produção é `wsgi.py`, iniciado como `wsgi:app`.
+- O projeto usa **psycopg v3**. URLs `postgres://` e `postgresql://` são normalizadas automaticamente para `postgresql+psycopg://`, evitando dependência acidental de `psycopg2`.
+- Em Railway, se `DATA_DIR` não for definido, o app assume `/data`; ainda assim, recomenda-se manter `DATA_DIR=/data` explicitamente.
+- O bootstrap inicial é idempotente para evitar corrida quando mais de um worker do Gunicorn inicia ao mesmo tempo.
