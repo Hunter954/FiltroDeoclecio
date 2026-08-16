@@ -3,7 +3,14 @@
 <div class="site editor-site" style="--brand:{{featured.primary_color}};--accent:{{featured.accent_color}}">
 <main class="editor-simple-main">
 <section class="editor-simple-section"><div class="wrap editor-simple-wrap">
-<div class="editor-topline"><a href="{{ url_for('public.filter_page', slug=featured.slug) }}" class="editor-back">← Voltar</a><div class="editor-filter-name" id="filterName">{{featured.name}}</div></div>
+<div class="editor-topline">
+  <a class="editor-campaign-logo" href="{{ url_for('public.filter_page', slug=featured.slug) }}" aria-label="Voltar para a página inicial">
+    {% set editor_logo_url=url_for('public.footer_logo') %}
+    <img src="{{editor_logo_url}}" alt="Logomarca da campanha" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <span class="editor-logo-fallback">DEOCLÉCIO DUARTE • 44222</span>
+  </a>
+  <a href="{{ url_for('public.filter_page', slug=featured.slug) }}" class="editor-back">← Voltar</a>
+</div>
 <div class="editor-simple-card">
   <div class="editor-canvas-area {{'has-filter-nav' if filters|length > 1 else 'no-filter-nav'}}">
     {% if filters|length > 1 %}<button class="filter-arrow filter-prev" id="filterPrev" aria-label="Filtro anterior">‹</button>{% endif %}
@@ -19,6 +26,7 @@
 </div>
 </div></section>
 </main>
+<footer><div class="wrap footer-inner"><div class="footer-logo-slot">{% set logo_url=url_for('public.footer_logo') %}<img src="{{logo_url}}" alt="Logomarca da campanha" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><span class="footer-logo-fallback">DEOCLÉCIO DUARTE • 44222</span></div><p>Ferramenta gratuita para criação de foto de perfil com moldura.</p></div></footer>
 </div>
 <script>window.FILTER_CONFIG={{ {'id':featured.id,'overlay':url_for('public.filter_asset',filter_id=featured.id,kind='overlay'),'name':featured.name,'filters':filters|map(attribute='id')|list}|tojson }};window.FILTER_OPTIONS={{ filters|map(attribute='id')|list|tojson }};</script>
 <script>
